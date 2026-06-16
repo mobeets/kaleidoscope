@@ -24,6 +24,9 @@ function TorusKnotShape()
 	var rotSpeedX = Math.random() / 400;
 	var rotSpeedY = Math.random() / 400;
 	var rotSpeedZ = Math.random() / 400;
+	// var rotSpeedX = 0;
+	// var rotSpeedY = 0;
+	// var rotSpeedZ = 0;
 
 	if (Math.random() > 0.5) {rotSpeedX = -rotSpeedX};
 	if (Math.random() > 0.5) {rotSpeedY = -rotSpeedX};
@@ -32,6 +35,7 @@ function TorusKnotShape()
 	var oscX = Math.random() * Math.PI*2;
 	var oscY = Math.random() * Math.PI*2;
 	var oscZ = Math.random() * Math.PI*2;
+	// oscX = 0; oscY = 0; oscZ = 0;
 
 	oscXSpeed = Math.random() * 0.003;
 	oscYSpeed = Math.random() * 0.003;

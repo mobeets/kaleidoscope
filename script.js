@@ -17,6 +17,14 @@ var lightness = 1.0;
 var isPaused = false;
 var shapeZoom = 2.2;
 
+var autoZoom = true;
+var autoZoomSpeed = 0.03;
+var autoZoomMin = 0.3;
+var autoZoomMax = 1.6;
+let startZoomPhase = Math.PI;
+var zoomPhase = startZoomPhase;
+var lastUpdateTime = null;
+
 
 var scene = new THREE.Scene();
 
@@ -38,9 +46,9 @@ controls.rotateSpeed = 1;
 var controls2 = new THREE.OrbitControls(camera, renderer.domElement);
 controls2.enableZoom = true;
 controls2.enableRotate = false;
-controls2.zoomSpeed = 0.3;
-controls2.minZoom = 0.2;
-controls2.maxZoom = 2;
+controls2.zoomSpeed = 0.5;
+controls2.minZoom = 0.09;
+controls2.maxZoom = 3;
 controls2.enablePan = false;
 
 
@@ -54,6 +62,7 @@ var numAxes = 12;
 
 var allShapes = [];
 var numShapes = 10;
+// var numShapes = 5;
 var complexity = 5;
 
 function createShapes()
@@ -306,6 +315,16 @@ gui.add(this, "isPaused").listen();
 gui.add(this, "randomize");
 gui.add(this, "randomizeColor");
 
+var autoZoomControl = gui.add(this, "autoZoom");
+gui.add(this, "autoZoomSpeed", 0.0, 1);
+gui.add(this, "autoZoomMin", 0.09, 3);
+gui.add(this, "autoZoomMax", 0.09, 3);
+
+autoZoomControl.onChange(function(value) {
+    controls2.enableZoom = !value;
+    zoomPhase = startZoomPhase;
+});
+
 
 shapeZoomControl.onChange(function(value){
 	bufferCamera.position.z = shapeZoom;
@@ -381,10 +400,24 @@ function update()
 {
 	controls.update();
 
+	var now = Date.now();
+	var dt = lastUpdateTime !== null ? (now - lastUpdateTime) / 1000 : 0;
+	lastUpdateTime = now;
+
 	if (!isPaused)
 	{
 		for (var i=0; i<complexity; i++) {
 			allShapes[i].update();
+		}
+
+		if (autoZoom) {
+			zoomPhase += dt * autoZoomSpeed;
+			var logMin = Math.log(autoZoomMin);
+			var logMax = Math.log(autoZoomMax);
+			var logMid = (logMax + logMin) / 2;
+			var logAmp = (logMax - logMin) / 2;
+			camera.zoom = Math.exp(logMid + logAmp * Math.sin(zoomPhase * Math.PI * 2));
+			camera.updateProjectionMatrix();
 		}
 	}
 }
