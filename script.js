@@ -395,7 +395,7 @@ planeObj.visible = false;
 
 
 
-var gui = new dat.GUI();
+var gui = new dat.GUI({ closed: true });
 gui.add(this, "speed", 0, 2);
 var complexityControl = gui.add(this, "complexity", 1, 10).step(1);
 var shapeZoomControl = gui.add(this, "shapeZoom", 1, 3);
