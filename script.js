@@ -12,22 +12,35 @@ var bufferHeight = bufferSize;
 
 var showTexture = false;
 var speed = 0.5;
-var saturation = 1.0;
+var saturation = 3.0;
 var lightness = 1.0;
 var isPaused = false;
 var shapeZoom = 2.2;
 
+var paletteHue = Math.random();
+var paletteHueSpeed = 0.0002;
+var currentPaletteName = 'complementary';
+
+var palettes = {
+	monochromatic:       [0, 0.04, -0.04, 0.08, -0.08, 0.02, -0.02, 0.06, -0.06, 0.10],
+	complementary:       [0, 0.50, 0.03, 0.53, -0.03, 0.47, 0.06, 0.56, -0.06, 0.44],
+	analogous:           [0, 0.07, 0.14, 0.21, -0.07, -0.14, 0.035, 0.105, 0.175, -0.035],
+	triadic:             [0, 0.333, 0.667, 0.04, 0.373, 0.707, -0.04, 0.293, 0.627, 0.02],
+	'split-complementary': [0, 0.417, 0.583, 0.03, 0.447, 0.613, -0.03, 0.387, 0.553, 0.06],
+	tetradic:            [0, 0.25, 0.50, 0.75, 0.03, 0.28, 0.53, 0.78, -0.03, 0.22],
+};
+
 var autoZoom = true;
-var autoZoomSpeed = 0.03;
+var autoZoomSpeed = 0.01;
 var autoZoomMin = 0.3;
-var autoZoomMax = 1.6;
+var autoZoomMax = 2.0;
 let startZoomPhase = Math.PI;
 var zoomPhase = startZoomPhase;
 var lastUpdateTime = null;
 
-var autoRotate = false;
-var autoRotateWait = 4.0;
-var autoRotateDuration = 1.0;
+var autoRotate = true;
+var autoRotateWait = 8.0;
+var autoRotateDuration = 8.0;
 var autoRotateStep = 90;
 var _rotatePhase = 'waiting';
 var _rotateTimer = 0;
@@ -152,6 +165,15 @@ function createShapes()
 	}	
 }
 createShapes();
+
+function applyPalette(name) {
+	currentPaletteName = name;
+	var offsets = palettes[name];
+	for (var i = 0; i < numShapes; i++) {
+		allShapes[i].paletteOffset = offsets[i % offsets.length];
+	}
+}
+applyPalette(currentPaletteName);
 
 
 var ambientLight = new THREE.AmbientLight(0x808080);
@@ -385,6 +407,10 @@ gui.add(this, "isPaused").listen();
 gui.add(this, "randomize");
 gui.add(this, "randomizeColor");
 
+var paletteControl = gui.add(this, "currentPaletteName", Object.keys(palettes));
+gui.add(this, "paletteHueSpeed", 0, 0.002);
+paletteControl.onChange(function(value) { applyPalette(value); });
+
 var autoZoomControl = gui.add(this, "autoZoom");
 gui.add(this, "autoZoomSpeed", 0.0, 1);
 gui.add(this, "autoZoomMin", 0.09, 3);
@@ -414,7 +440,7 @@ micControl.onChange(function(value) {
 
 var autoRotateControl = gui.add(this, "autoRotate");
 gui.add(this, "autoRotateWait", 0.5, 20);
-gui.add(this, "autoRotateDuration", 0.1, 5);
+gui.add(this, "autoRotateDuration", 0.1, 20);
 gui.add(this, "autoRotateStep", 15, 180).step(15);
 
 autoRotateControl.onChange(function(value) {
@@ -468,6 +494,7 @@ function randomize()
 		bufferScene.remove(allShapes[i].mesh);
 	}
 	createShapes();
+	applyPalette(currentPaletteName);
 }
 
 function randomizeColor()
@@ -503,6 +530,8 @@ function update()
 
 	if (!isPaused)
 	{
+		paletteHue = (paletteHue + paletteHueSpeed * speed) % 1.0;
+
 		for (var i=0; i<complexity; i++) {
 			allShapes[i].update();
 		}
