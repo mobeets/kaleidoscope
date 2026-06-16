@@ -25,6 +25,76 @@ let startZoomPhase = Math.PI;
 var zoomPhase = startZoomPhase;
 var lastUpdateTime = null;
 
+var autoRotate = false;
+var autoRotateWait = 4.0;
+var autoRotateDuration = 1.0;
+var autoRotateStep = 90;
+var _rotatePhase = 'waiting';
+var _rotateTimer = 0;
+var _rotateFrom = 0;
+var _rotateTo = 0;
+var _rotateProgress = 0;
+
+var micEnabled = false;
+var micSensitivity = 5.0;
+var micBeatThreshold = 1.5; // spike must be this many times above baseline
+var micBeatCooldown = 0.25; // minimum seconds between beats
+var micBeatDivisor = 32;
+var _micAudioContext = null;
+var _micAnalyser = null;
+var _micDataArray = null;
+var _micStream = null;
+var _micSlowAmp = 0;
+var _lastBeatTime = 0;
+var _beatInterval = 1.0;
+
+function getMicAmplitude() {
+    if (!_micAnalyser) return 0;
+    _micAnalyser.getByteTimeDomainData(_micDataArray);
+    var sum = 0;
+    for (var i = 0; i < _micDataArray.length; i++) {
+        var v = (_micDataArray[i] - 128) / 128;
+        sum += v * v;
+    }
+    return Math.sqrt(sum / _micDataArray.length);
+}
+
+function startMic() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert('Mic requires a secure context (localhost or HTTPS). Open via a local server, not file://.');
+        micEnabled = false;
+        return;
+    }
+    navigator.mediaDevices.getUserMedia({ audio: true, video: false })
+        .then(function(stream) {
+            _micStream = stream;
+            _micAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+            var source = _micAudioContext.createMediaStreamSource(stream);
+            _micAnalyser = _micAudioContext.createAnalyser();
+            _micAnalyser.fftSize = 256;
+            _micDataArray = new Uint8Array(_micAnalyser.fftSize);
+            source.connect(_micAnalyser);
+        })
+        .catch(function(err) {
+            console.warn('Mic access denied:', err);
+            micEnabled = false;
+        });
+}
+
+function stopMic() {
+    if (_micStream) {
+        _micStream.getTracks().forEach(function(t) { t.stop(); });
+        _micStream = null;
+    }
+    if (_micAudioContext) {
+        _micAudioContext.close();
+        _micAudioContext = null;
+    }
+    _micAnalyser = null;
+    _micDataArray = null;
+    micAmplitude = 0;
+}
+
 
 var scene = new THREE.Scene();
 
@@ -325,6 +395,33 @@ autoZoomControl.onChange(function(value) {
     zoomPhase = startZoomPhase;
 });
 
+var micControl = gui.add(this, "micEnabled");
+gui.add(this, "micSensitivity", 1, 50);
+gui.add(this, "micBeatThreshold", 1.1, 5);
+gui.add(this, "micBeatCooldown", 0.1, 1.0);
+gui.add(this, "micBeatDivisor", 1, 32).step(1);
+
+micControl.onChange(function(value) {
+    if (value) {
+        startMic();
+        controls2.enableZoom = false;
+    } else {
+        stopMic();
+        controls2.enableZoom = !autoZoom;
+    }
+});
+
+
+var autoRotateControl = gui.add(this, "autoRotate");
+gui.add(this, "autoRotateWait", 0.5, 20);
+gui.add(this, "autoRotateDuration", 0.1, 5);
+gui.add(this, "autoRotateStep", 15, 180).step(15);
+
+autoRotateControl.onChange(function(value) {
+    if (!value) camera.rotation.z = 0;
+    _rotatePhase = 'waiting';
+    _rotateTimer = 0;
+});
 
 shapeZoomControl.onChange(function(value){
 	bufferCamera.position.z = shapeZoom;
@@ -410,7 +507,50 @@ function update()
 			allShapes[i].update();
 		}
 
-		if (autoZoom) {
+		if (micEnabled && _micAnalyser) {
+			var raw = getMicAmplitude() * micSensitivity;
+			// slow baseline tracks ambient level
+			_micSlowAmp = _micSlowAmp * 0.97 + raw * 0.03;
+			var nowSec = now / 1000;
+			var timeSinceBeat = nowSec - _lastBeatTime;
+			// detect a spike above threshold with cooldown
+			if (raw > Math.max(_micSlowAmp * micBeatThreshold, 0.01) && timeSinceBeat > micBeatCooldown) {
+				// only incorporate interval if it's in a plausible BPM range (30-240 BPM)
+				if (timeSinceBeat < 2.0) {
+					_beatInterval = _beatInterval * 0.8 + timeSinceBeat * 0.2;
+				}
+				_lastBeatTime = nowSec;
+				autoZoomSpeed = 1.0 / (_beatInterval * micBeatDivisor);
+				autoRotateWait = _beatInterval * micBeatDivisor;
+			}
+		}
+
+		if (autoRotate) {
+			if (_rotatePhase === 'waiting') {
+				_rotateTimer += dt;
+				if (_rotateTimer >= autoRotateWait) {
+					_rotateTimer = 0;
+					_rotatePhase = 'rotating';
+					_rotateProgress = 0;
+					_rotateFrom = camera.rotation.z;
+					_rotateTo = _rotateFrom + autoRotateStep * Math.PI / 180;
+				}
+			} else {
+				_rotateProgress += dt / autoRotateDuration;
+				if (_rotateProgress >= 1) {
+					_rotateProgress = 1;
+					_rotatePhase = 'waiting';
+					_rotateTimer = 0;
+				}
+				// ease in-out
+				var t = _rotateProgress < 0.5
+					? 2 * _rotateProgress * _rotateProgress
+					: 1 - Math.pow(-2 * _rotateProgress + 2, 2) / 2;
+				camera.rotation.z = _rotateFrom + (_rotateTo - _rotateFrom) * t;
+			}
+		}
+
+		if (autoZoom || micEnabled) {
 			zoomPhase += dt * autoZoomSpeed;
 			var logMin = Math.log(autoZoomMin);
 			var logMax = Math.log(autoZoomMax);
